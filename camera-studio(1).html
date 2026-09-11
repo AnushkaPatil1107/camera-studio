@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera Studio</title>
+<style>
+  :root{
+    --bg: #14171a;
+    --panel: #1c2024;
+    --line: #2c3136;
+    --ink: #eceeef;
+    --dim: #8a9199;
+    --accent: #ff5a36;
+    --accent-dim: #7a2c1c;
+    --rec: #ff3b3b;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; height:100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body{
+    display:flex; flex-direction:column; align-items:center;
+    padding: 48px 20px;
+  }
+  .masthead{
+    width:100%; max-width:720px;
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-bottom: 1px solid var(--line);
+    padding-bottom:14px; margin-bottom:28px;
+  }
+  .masthead h1{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight:400; font-size:28px; letter-spacing:0.5px; margin:0;
+  }
+  .masthead .status{
+    font-size:12px; color:var(--dim);
+  }
+  .status.live{ color: var(--accent); }
+
+  .stage{
+    width:100%; max-width:720px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow:hidden;
+  }
+  .viewfinder{
+    position:relative;
+    width:100%; aspect-ratio: 4/3;
+    background: #000;
+    display:flex; align-items:center; justify-content:center;
+  }
+  video, canvas, img.preview{
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+  .hint{
+    color: var(--dim); font-size:13px; text-align:center; padding:0 20px;
+  }
+  .rec-badge{
+    position:absolute; top:14px; left:14px;
+    display:none; align-items:center; gap:7px;
+    background: rgba(0,0,0,0.55);
+    padding:5px 10px; border-radius:20px;
+    font-size:12px; letter-spacing:0.5px;
+  }
+  .rec-badge.on{ display:flex; }
+  .rec-dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--rec);
+    animation: pulse 1.1s infinite;
+  }
+  @keyframes pulse{ 50%{ opacity:0.25; } }
+  .timer{
+    position:absolute; top:14px; right:14px;
+    background: rgba(0,0,0,0.55);
+    padding:5px 10px; border-radius:20px;
+    font-size:12px; display:none;
+  }
+  .timer.on{ display:block; }
+
+  .controls{
+    display:flex; justify-content:center; align-items:center; gap:14px;
+    padding: 20px; border-top: 1px solid var(--line);
+  }
+  .mode-toggle{
+    display:flex; border:1px solid var(--line); border-radius:20px; overflow:hidden;
+    margin-right:auto; font-size:12px;
+  }
+  .mode-toggle button{
+    background:none; border:none; color:var(--dim);
+    padding:8px 14px; cursor:pointer; font-family:inherit;
+  }
+  .mode-toggle button.active{
+    background: var(--accent); color:#1c0e08; font-weight:bold;
+  }
+  .shutter{
+    width:58px; height:58px; border-radius:50%;
+    background: var(--ink); border: 3px solid var(--dim);
+    cursor:pointer;
+  }
+  .shutter:hover{ border-color: var(--ink); }
+  .shutter.recording{
+    background: var(--rec); border-color: #ffb3b3;
+  }
+  .shutter:disabled{ opacity:0.3; cursor:not-allowed; }
+  .side-btn{
+    background:none; border:1px solid var(--line); color:var(--dim);
+    padding:9px 16px; border-radius:20px; font-size:12px;
+    font-family:inherit; cursor:pointer;
+  }
+  .side-btn:hover{ color:var(--ink); border-color:var(--dim); }
+  .side-btn:disabled{ opacity:0.3; cursor:not-allowed; }
+
+  .result{
+    width:100%; max-width:720px; margin-top:16px;
+    display:none;
+  }
+  .result.show{ display:block; }
+  .result a{
+    display:inline-block; margin-top:8px;
+    color: var(--accent); font-size:13px; text-decoration:none;
+    border-bottom: 1px solid var(--accent-dim);
+  }
+  .result a:hover{ border-color: var(--accent); }
+  .foot{
+    color: var(--dim); font-size:11px; margin-top:22px; text-align:center;
+    max-width:720px;
+  }
+
+  .phone-panel{
+    width:100%; max-width:720px; margin-top:18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 18px 20px;
+  }
+  .phone-panel .ph-head{
+    display:flex; justify-content:space-between; align-items:center;
+    cursor:pointer; user-select:none;
+  }
+  .phone-panel .ph-head h2{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight:400; font-size:16px; margin:0;
+  }
+  .phone-panel .ph-head .chev{
+    color: var(--dim); font-size:12px;
+  }
+  .phone-body{
+    display:none;
+    margin-top:16px;
+    gap:18px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .phone-body.open{ display:flex; }
+  #qrBox{
+    background:#fff; padding:10px; border-radius:4px;
+    width:150px; height:150px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  #qrBox img, #qrBox canvas{ width:100%; height:100%; }
+  .phone-info{ flex:1; min-width:220px; }
+  .phone-info label{
+    display:block; font-size:11px; color:var(--dim); margin-bottom:6px;
+  }
+  .url-row{ display:flex; gap:8px; margin-bottom:12px; }
+  .url-row input{
+    flex:1; background:#0f1214; border:1px solid var(--line); color:var(--ink);
+    padding:8px 10px; border-radius:4px; font-family:inherit; font-size:12px;
+  }
+  .url-row button{
+    background:none; border:1px solid var(--line); color:var(--dim);
+    padding:8px 12px; border-radius:4px; font-family:inherit; font-size:12px; cursor:pointer;
+  }
+  .url-row button:hover{ color:var(--ink); border-color:var(--dim); }
+  .phone-note{
+    font-size:12px; color:var(--dim); line-height:1.6; margin:0;
+  }
+  .phone-note strong{ color:var(--ink); font-weight:normal; border-bottom:1px solid var(--accent-dim); }
+
+  .feed-panel{
+    width:100%; max-width:720px; margin-top:18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow:hidden;
+    display:none;
+  }
+  .feed-panel.show{ display:block; }
+  .feed-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 14px 20px; border-bottom:1px solid var(--line);
+  }
+  .feed-head h2{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight:400; font-size:16px; margin:0;
+  }
+  .feed-status{ font-size:12px; color:var(--dim); }
+  .feed-status.live{ color: var(--accent); }
+  .feed-body{
+    position:relative; width:100%; aspect-ratio:4/3; background:#000;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #remoteVideo{ width:100%; height:100%; object-fit:cover; display:none; }
+  .feed-waiting{ color:var(--dim); font-size:13px; text-align:center; padding:0 20px; }
+  .feed-controls{
+    display:flex; justify-content:center; padding:16px; border-top:1px solid var(--line);
+  }
+
+  .role-banner{
+    width:100%; max-width:720px; margin-bottom:20px;
+    background: var(--panel); border:1px solid var(--accent-dim);
+    border-radius:4px; padding:14px 18px; font-size:13px; color:var(--ink);
+    display:none;
+  }
+  .role-banner.show{ display:block; }
+  .role-banner .rb-dot{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background: var(--dim); margin-right:8px;
+  }
+  .role-banner .rb-dot.connected{ background: var(--accent); }
+</style>
+</head>
+<body>
+
+  <div class="masthead">
+    <h1>Camera Studio</h1>
+    <span class="status" id="status">camera off</span>
+  </div>
+
+  <div class="role-banner" id="roleBanner">
+    <span class="rb-dot" id="rbDot"></span><span id="rbText">Connecting to your PC…</span>
+  </div>
+
+  <div class="stage">
+    <div class="viewfinder" id="viewfinder">
+      <span class="hint" id="hint">Allow camera access to begin — nothing leaves this browser tab.</span>
+      <video id="video" autoplay playsinline muted style="display:none;"></video>
+      <canvas id="canvas" style="display:none;"></canvas>
+      <div class="rec-badge" id="recBadge"><span class="rec-dot"></span>REC</div>
+      <div class="timer" id="timer">00:00</div>
+    </div>
+    <div class="controls">
+      <div class="mode-toggle">
+        <button id="photoModeBtn" class="active">PHOTO</button>
+        <button id="videoModeBtn">VIDEO</button>
+      </div>
+      <button class="shutter" id="shutterBtn" disabled title="Start camera first"></button>
+      <button class="side-btn" id="startBtn">Start camera</button>
+    </div>
+  </div>
+
+  <div class="result" id="result">
+    <span class="hint" id="resultLabel"></span><br>
+    <a id="downloadLink" download>Download</a>
+  </div>
+
+  <div class="phone-panel">
+    <div class="ph-head" id="phToggle">
+      <h2>Use your phone's camera instead</h2>
+      <span class="chev" id="phChev">show ▾</span>
+    </div>
+    <div class="phone-body" id="phBody">
+      <div id="qrBox"></div>
+      <div class="phone-info">
+        <label for="pageUrl">Page address (edit if scanning fails)</label>
+        <div class="url-row">
+          <input type="text" id="pageUrl" spellcheck="false">
+          <button id="regenBtn">Update QR</button>
+        </div>
+        <p class="phone-note">
+          Scan this with your phone's camera to open this exact page on your phone, then use the Photo/Video controls above as normal — captured files download to your phone.
+          <br><br>
+          For the phone's camera to work, this page must be loaded over <strong>https://</strong> — a plain <code>file://</code> path or a local <code>http://</code> network address usually won't be allowed by the phone's browser. If you're serving it from your PC (e.g. <code>python3 -m http.server</code>), tools like <strong>ngrok</strong> or <strong>Tailscale Funnel</strong> can give you a temporary https:// link to point the QR code at.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="feed-panel" id="feedPanel">
+    <div class="feed-head">
+      <h2>Phone feed</h2>
+      <span class="feed-status" id="feedStatus">waiting for phone…</span>
+    </div>
+    <div class="feed-body">
+      <span class="feed-waiting" id="feedWaiting">Once your phone connects via the QR code above, its live camera view appears here.</span>
+      <video id="remoteVideo" autoplay playsinline></video>
+    </div>
+    <div class="feed-controls">
+      <button class="side-btn" id="captureFeedBtn" disabled>Save photo from phone feed</button>
+    </div>
+  </div>
+
+  <p class="foot">Runs entirely in your browser via getUserMedia — no upload, no server. Works best in Chrome, Firefox, or Edge over HTTPS (or localhost).</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const hint = document.getElementById('hint');
+const status = document.getElementById('status');
+const startBtn = document.getElementById('startBtn');
+const shutterBtn = document.getElementById('shutterBtn');
+const photoModeBtn = document.getElementById('photoModeBtn');
+const videoModeBtn = document.getElementById('videoModeBtn');
+const recBadge = document.getElementById('recBadge');
+const timerEl = document.getElementById('timer');
+const result = document.getElementById('result');
+const resultLabel = document.getElementById('resultLabel');
+const downloadLink = document.getElementById('downloadLink');
+
+let stream = null;
+let mode = 'photo'; // or 'video'
+let mediaRecorder = null;
+let chunks = [];
+let recording = false;
+let timerInterval = null;
+let seconds = 0;
+
+function setMode(m){
+  mode = m;
+  photoModeBtn.classList.toggle('active', m === 'photo');
+  videoModeBtn.classList.toggle('active', m === 'video');
+  shutterBtn.style.borderRadius = '50%';
+}
+
+photoModeBtn.onclick = () => { if(!recording) setMode('photo'); };
+videoModeBtn.onclick = () => { if(!recording) setMode('video'); };
+
+async function startCamera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    video.srcObject = stream;
+    video.style.display = 'block';
+    hint.style.display = 'none';
+    shutterBtn.disabled = false;
+    startBtn.textContent = 'Stop camera';
+    status.textContent = 'camera live';
+    status.classList.add('live');
+    startBtn.onclick = stopCamera;
+  }catch(err){
+    hint.textContent = 'Could not access camera: ' + err.message;
+  }
+}
+
+function stopCamera(){
+  if(recording) stopRecording();
+  if(stream){ stream.getTracks().forEach(t => t.stop()); }
+  stream = null;
+  video.style.display = 'none';
+  hint.style.display = 'block';
+  hint.textContent = 'Camera stopped. Click "Start camera" to begin again.';
+  shutterBtn.disabled = true;
+  status.textContent = 'camera off';
+  status.classList.remove('live');
+  startBtn.textContent = 'Start camera';
+  startBtn.onclick = startCamera;
+}
+
+startBtn.onclick = startCamera;
+
+shutterBtn.onclick = () => {
+  if(mode === 'photo'){
+    takePhoto();
+  } else {
+    if(!recording) startRecording();
+    else stopRecording();
+  }
+};
+
+function takePhoto(){
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    showResult(url, `photo-${Date.now()}.png`, 'Photo captured.');
+  }, 'image/png');
+}
+
+function startRecording(){
+  chunks = [];
+  let options = { mimeType: 'video/webm;codecs=vp9,opus' };
+  if(!MediaRecorder.isTypeSupported(options.mimeType)){
+    options = { mimeType: 'video/webm' };
+  }
+  mediaRecorder = new MediaRecorder(stream, options);
+  mediaRecorder.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    showResult(url, `video-${Date.now()}.webm`, 'Recording saved.');
+  };
+  mediaRecorder.start();
+  recording = true;
+  shutterBtn.classList.add('recording');
+  recBadge.classList.add('on');
+  timerEl.classList.add('on');
+  seconds = 0;
+  timerEl.textContent = '00:00';
+  timerInterval = setInterval(() => {
+    seconds++;
+    const m = String(Math.floor(seconds/60)).padStart(2,'0');
+    const s = String(seconds%60).padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+  }, 1000);
+  photoModeBtn.disabled = true;
+  videoModeBtn.disabled = true;
+  startBtn.disabled = true;
+}
+
+function stopRecording(){
+  if(mediaRecorder && mediaRecorder.state !== 'inactive'){
+    mediaRecorder.stop();
+  }
+  recording = false;
+  shutterBtn.classList.remove('recording');
+  recBadge.classList.remove('on');
+  timerEl.classList.remove('on');
+  clearInterval(timerInterval);
+  photoModeBtn.disabled = false;
+  videoModeBtn.disabled = false;
+  startBtn.disabled = false;
+}
+
+function showResult(url, filename, label){
+  resultLabel.textContent = label;
+  downloadLink.href = url;
+  downloadLink.download = filename;
+  downloadLink.textContent = `Download ${filename}`;
+  result.classList.add('show');
+}
+
+// --- Phone QR panel ---
+const phToggle = document.getElementById('phToggle');
+const phBody = document.getElementById('phBody');
+const phChev = document.getElementById('phChev');
+const qrBox = document.getElementById('qrBox');
+const pageUrlInput = document.getElementById('pageUrl');
+const regenBtn = document.getElementById('regenBtn');
+
+pageUrlInput.value = window.location.href;
+
+function renderQR(text){
+  qrBox.innerHTML = '';
+  if(!text) return;
+  try{
+    new QRCode(qrBox, {
+      text: text,
+      width: 130,
+      height: 130,
+      colorDark: '#14171a',
+      colorLight: '#ffffff'
+    });
+  }catch(e){
+    qrBox.textContent = 'Could not generate QR';
+  }
+}
+
+phToggle.onclick = () => {
+  const open = phBody.classList.toggle('open');
+  phChev.textContent = open ? 'hide ▴' : 'show ▾';
+  if(open && qrBox.innerHTML === '') renderQR(pageUrlInput.value);
+};
+
+regenBtn.onclick = () => renderQR(pageUrlInput.value);
+
+// --- Live phone feed (PeerJS, uses PeerJS's free public signaling server) ---
+const params = new URLSearchParams(window.location.search);
+const incomingHostId = params.get('peer');
+const isPhoneRole = !!incomingHostId;
+
+const roleBanner = document.getElementById('roleBanner');
+const rbDot = document.getElementById('rbDot');
+const rbText = document.getElementById('rbText');
+const feedPanel = document.getElementById('feedPanel');
+const feedStatus = document.getElementById('feedStatus');
+const feedWaiting = document.getElementById('feedWaiting');
+const remoteVideo = document.getElementById('remoteVideo');
+const captureFeedBtn = document.getElementById('captureFeedBtn');
+const phonePanelEl = document.querySelector('.phone-panel');
+
+function randomId(){
+  return 'camstudio-' + Math.random().toString(36).slice(2, 10);
+}
+
+if(isPhoneRole){
+  // This tab is running on the phone: hide the "use your phone" panel
+  // (no point showing a QR code for a QR code), show a status banner instead,
+  // and stream this device's camera to the PC once it's started.
+  if(phonePanelEl) phonePanelEl.style.display = 'none';
+  roleBanner.classList.add('show');
+  rbText.textContent = 'Connecting to your PC…';
+
+  let phonePeer = null;
+  let sentThisSession = false;
+
+  function sendStreamToHost(){
+    if(!stream || sentThisSession) return;
+    try{
+      phonePeer = new Peer(randomId());
+      phonePeer.on('open', () => {
+        const call = phonePeer.call(incomingHostId, stream);
+        if(!call){
+          rbText.textContent = 'Could not reach your PC — is the tab still open there?';
+          return;
+        }
+        sentThisSession = true;
+        rbDot.classList.add('connected');
+        rbText.textContent = 'Connected — this camera is showing on your PC.';
+        call.on('close', () => {
+          rbDot.classList.remove('connected');
+          rbText.textContent = 'Disconnected from PC.';
+          sentThisSession = false;
+        });
+      });
+      phonePeer.on('error', () => {
+        rbText.textContent = 'Could not connect to your PC (network or signaling issue).';
+      });
+    }catch(e){
+      rbText.textContent = 'Live feed unavailable in this browser.';
+    }
+  }
+
+  // Hook into the existing startCamera success path without duplicating it.
+  const originalStartCamera = startCamera;
+  startCamera = async function(){
+    await originalStartCamera();
+    if(stream) sendStreamToHost();
+  };
+  startBtn.onclick = startCamera;
+
+} else {
+  // This tab is running on the PC: spin up a host peer immediately so the
+  // QR code / link can include its ID, and listen for an incoming call.
+  try{
+    const hostPeer = new Peer(randomId());
+    hostPeer.on('open', id => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('peer', id);
+      pageUrlInput.value = url.toString();
+      if(phBody.classList.contains('open')) renderQR(pageUrlInput.value);
+    });
+    hostPeer.on('call', call => {
+      call.answer(); // no outgoing stream needed, just receive
+      feedPanel.classList.add('show');
+      feedStatus.textContent = 'connecting…';
+      call.on('stream', remoteStream => {
+        remoteVideo.srcObject = remoteStream;
+        remoteVideo.style.display = 'block';
+        feedWaiting.style.display = 'none';
+        feedStatus.textContent = 'live';
+        feedStatus.classList.add('live');
+        captureFeedBtn.disabled = false;
+      });
+      call.on('close', () => {
+        remoteVideo.style.display = 'none';
+        feedWaiting.style.display = 'block';
+        feedWaiting.textContent = 'Phone disconnected.';
+        feedStatus.textContent = 'disconnected';
+        feedStatus.classList.remove('live');
+        captureFeedBtn.disabled = true;
+      });
+    });
+    hostPeer.on('error', () => {
+      // Signaling unreachable (offline, blocked, etc.) — QR/link still work,
+      // they just won't include a working peer id for the live feed.
+    });
+  }catch(e){
+    // PeerJS failed to load; live phone feed simply won't be available.
+  }
+
+  captureFeedBtn.onclick = () => {
+    canvas.width = remoteVideo.videoWidth;
+    canvas.height = remoteVideo.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(remoteVideo, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      showResult(url, `phone-photo-${Date.now()}.png`, 'Photo captured from phone feed.');
+    }, 'image/png');
+  };
+}
+</script>
+</body>
+</html>
